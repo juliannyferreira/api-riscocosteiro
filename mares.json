@@ -1,0 +1,5 @@
+{
+  "1": { "praia": "Pina", "mareAtual": 1.2, "tendencia": "Subindo", "proximaAlta": "14:30", "proximaBaixa": "08:15" },
+  "2": { "praia": "Boa Viagem", "mareAtual": 1.1, "tendencia": "Subindo", "proximaAlta": "14:35", "proximaBaixa": "08:20" },
+  "3": { "praia": "Piedade", "mareAtual": 1.3, "tendencia": "Subindo", "proximaAlta": "14:40", "proximaBaixa": "08:25" }
+}
