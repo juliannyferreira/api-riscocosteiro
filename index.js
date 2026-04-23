@@ -5,14 +5,14 @@ const axios = require('axios');
 const app = express();
 app.use(cors());
 
-// Coordenadas das nossas praias para a Maré
+// Coordenadas reais das praias
 const coordenadasPraias = {
   "1": { nome: "Pina", lat: -8.0944, lon: -34.8805 },
   "2": { nome: "Boa Viagem", lat: -8.1250, lon: -34.9011 },
   "3": { nome: "Piedade", lat: -8.1808, lon: -34.9163 }
 };
 
-// Rota para o Clima (Mantida igualzinha, pois já funciona perfeitamente)
+// Rota para o Clima (Buscando da Open-Meteo)
 app.get('/clima', async (req, res) => {
   const { lat, lon } = req.query;
   try {
@@ -28,11 +28,12 @@ app.get('/clima', async (req, res) => {
     };
     res.json(climaLimpo);
   } catch (error) {
+    console.error("Erro no clima:", error);
     res.status(500).json({ error: "Erro ao buscar clima" });
   }
 });
 
-// NOVA Rota para a Maré (Agora buscando DADOS REAIS E GRATUITOS)
+// NOVA Rota para a Maré (Blindada, olhando para o oceano e evitando nulos)
 app.get('/mare', async (req, res) => {
   const { id } = req.query; 
   const praia = coordenadasPraias[id];
@@ -42,14 +43,13 @@ app.get('/mare', async (req, res) => {
   }
 
   try {
-    // Busca o nível do mar na Open-Meteo Marine (com fuso horário do Recife)
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${praia.lat}&longitude=${praia.lon}&hourly=sea_level&timezone=America/Recife`;
+    // Busca a altura das ondas forçando o satélite a olhar para o mar (cell_selection=sea)
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${praia.lat}&longitude=${praia.lon}&hourly=wave_height&timezone=America/Recife&cell_selection=sea`;
     const response = await axios.get(url);
     
     const times = response.data.hourly.time;
-    const levels = response.data.hourly.sea_level;
+    const levels = response.data.hourly.wave_height;
     
-    // Descobre qual é a hora atual para pegar a maré de "AGORA"
     const now = new Date();
     let currentIndex = 0;
     let minDiff = Infinity;
@@ -63,23 +63,23 @@ app.get('/mare', async (req, res) => {
       }
     });
 
-    const mareAtual = levels[currentIndex];
-    const tendencia = levels[currentIndex + 1] > mareAtual ? "Subindo" : "Baixando";
+    // Se a API falhar e retornar vazio, usamos 0.0 para não travar o app
+    let mareAtual = levels[currentIndex] || 0.0; 
+    let proxima = levels[currentIndex + 1] || 0.0;
+    
+    const tendencia = proxima > mareAtual ? "Subindo" : "Baixando";
 
-    // Procura na lista a próxima Maré Alta (Pico) e Baixa (Vale)
     let proximaAlta = "--:--";
     let proximaBaixa = "--:--";
 
     for (let i = currentIndex; i < levels.length - 1; i++) {
-      const prev = levels[i - 1] || levels[i];
-      const curr = levels[i];
-      const next = levels[i + 1];
+      const prev = levels[i - 1] || levels[i] || 0;
+      const curr = levels[i] || 0;
+      const next = levels[i + 1] || 0;
 
-      // Se o nível atual é maior que o anterior e maior que o próximo = Alta
       if (proximaAlta === "--:--" && curr > prev && curr > next) {
-        proximaAlta = times[i].split("T")[1]; // Pega só a hora (ex: 14:00)
+        proximaAlta = times[i].split("T")[1]; 
       }
-      // Se o nível atual é menor que o anterior e menor que o próximo = Baixa
       if (proximaBaixa === "--:--" && curr < prev && curr < next) {
         proximaBaixa = times[i].split("T")[1];
       }
@@ -87,10 +87,9 @@ app.get('/mare', async (req, res) => {
       if (proximaAlta !== "--:--" && proximaBaixa !== "--:--") break;
     }
 
-    // Envia os dados mastigados para o celular
     res.json({
       praia: praia.nome,
-      mareAtual: mareAtual.toFixed(2), // Mostra com duas casas decimais
+      mareAtual: mareAtual.toFixed(2),
       tendencia: tendencia,
       proximaAlta: proximaAlta,
       proximaBaixa: proximaBaixa
